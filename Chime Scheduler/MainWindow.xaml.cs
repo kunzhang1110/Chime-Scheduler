@@ -8,24 +8,24 @@ using Application = System.Windows.Application;
 using MessageBox = System.Windows.MessageBox;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using System.Windows.Controls;
+using Microsoft.Win32;
 
 namespace ChimeScheduler
 {
     public partial class MainWindow : Window
     {
-        private string? scriptPath;
-        private int intervalMinutes;
-        private CancellationTokenSource? cancellationTokenSource;
-        private bool isRunning = false;
-        private DateTime? startTime;
-        private NotifyIcon? trayIcon;
-
         private readonly string configFilePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             System.Reflection.Assembly.GetExecutingAssembly().GetName().Name ?? "ChimeScheduler",
             "configs.json"
         );//C:\Users\{YourUsername}\AppData\Roaming
 
+        private string? scriptPath;
+        private int intervalMinutes;
+        private DateTime? startTime;
+        private NotifyIcon? trayIcon;
+        private CancellationTokenSource? cancellationTokenSource;
+        private bool isRunning = false;
         private Dictionary<string, string>? configs;
 
         public MainWindow()
@@ -37,6 +37,7 @@ namespace ChimeScheduler
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing!;
         }
+        
 
         private void InitializeTrayIcon()
         {
@@ -116,13 +117,13 @@ namespace ChimeScheduler
 
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {   // Save the configs and dispose tray icon when closing the window
-            configs!["scriptPath"] = scriptPath??string.Empty;
+            configs!["scriptPath"] = scriptPath ?? string.Empty;
             configs!["intervalMinutes"] = intervalMinutes.ToString();
 
             Directory.CreateDirectory(Path.GetDirectoryName(configFilePath)!);
             string json = JsonSerializer.Serialize(configs, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(configFilePath, json);
-    
+
             trayIcon!.Visible = false;
             trayIcon.Dispose();
         }
@@ -141,28 +142,17 @@ namespace ChimeScheduler
             }
         }
 
-        private void TxtInterval_TextChanged(object sender, TextChangedEventArgs e)
+        private void ChkUseStartTime_CheckedUnchecked(object sender, RoutedEventArgs e)
         {
-            if (int.TryParse(TxtInterval.Text, out int result))
-            {
-                intervalMinutes = result;
-            }
-        }
+            bool isChecked = ChkUseStartTime.IsChecked == true; // Check the state of the CheckBox
 
-        private void ChkUseStartTime_Checked(object sender, RoutedEventArgs e)
-        {
-            TxtStartTime.IsEnabled = true;
-            DpStartDate.IsEnabled = true;
-        }
-
-        private void ChkUseStartTime_Unchecked(object sender, RoutedEventArgs e)
-        {
-            TxtStartTime.IsEnabled = false;
-            DpStartDate.IsEnabled = false;
+            TxtStartTime.IsEnabled = isChecked; // Set the TextBox enabled state
+            DpStartDate.IsEnabled = isChecked;   // Set the DatePicker enabled state
         }
 
         private async void BtnStartStop_Click(object sender, RoutedEventArgs e)
         {
+   
             if (!isRunning)
             {
                 if (string.IsNullOrEmpty(scriptPath) || !File.Exists(scriptPath))
@@ -194,6 +184,8 @@ namespace ChimeScheduler
                 isRunning = true;
                 BtnStartStop.Content = "Stop";
                 cancellationTokenSource = new CancellationTokenSource();
+                setControlIsEnabledState(false); 
+
                 try
                 {
                     await RunScriptPeriodicallyAsync(cancellationTokenSource.Token);
@@ -206,12 +198,24 @@ namespace ChimeScheduler
                 {
                     isRunning = false;
                     BtnStartStop.Content = "Start";
+                    setControlIsEnabledState(true);
                 }
             }
             else
             {
-                cancellationTokenSource?.Cancel();
+                cancellationTokenSource?.Cancel(); //request to cancel
             }
+  
+        }
+
+        private void setControlIsEnabledState(bool enable)
+        {
+            TxtScriptPath.IsEnabled = enable;
+            BtnBrowse.IsEnabled = enable;
+            TxtInterval.IsEnabled = enable;
+            ChkUseStartTime.IsEnabled = enable;
+            TxtStartTime.IsEnabled = enable;
+            DpStartDate.IsEnabled = enable;
         }
 
         private bool TryParseStartTime(out DateTime result)
@@ -227,12 +231,24 @@ namespace ChimeScheduler
 
         private async Task RunScriptPeriodicallyAsync(CancellationToken cancellationToken)
         {
+
             if (startTime.HasValue)
-            {
-                TimeSpan delay = startTime.Value - DateTime.Now;
-                if (delay > TimeSpan.Zero)
+            {   // If the start time is in the past
+                TimeSpan initialDelay = startTime.Value - DateTime.Now;
+
+                if (initialDelay < TimeSpan.Zero)
                 {
-                    await Task.Delay(delay, cancellationToken);
+                    TimeSpan elapsedTime = DateTime.Now - startTime.Value;
+
+                    double intervalsPassed = Math.Floor(elapsedTime.TotalMinutes / intervalMinutes);
+                    TimeSpan timeUntilNextExecution = TimeSpan.FromMinutes((intervalsPassed + 1) * intervalMinutes) - elapsedTime;
+
+                    await Task.Delay(timeUntilNextExecution, cancellationToken);
+                }
+                else
+                {
+                    // If the start time is in the future, wait until the start time
+                    await Task.Delay(initialDelay, cancellationToken);
                 }
             }
 
@@ -254,10 +270,10 @@ namespace ChimeScheduler
             process.Start();
 
             string output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken); //wait for the powershell process to exit
 
             Dispatcher.Invoke(() =>
-            {
+            {   //update UI thread from background thread with Dispatcher
                 TxtOutput.Text += $"{DateTime.Now}: Script executed\n{output}\n\n";
                 TxtOutput.ScrollToEnd();
             });

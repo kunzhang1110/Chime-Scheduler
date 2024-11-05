@@ -23,7 +23,7 @@
         <Button x:Name="BtnBrowse" Content="Browse" Grid.Row="0" Grid.Column="2" Margin="5" Padding="10,5" Click="BtnBrowse_Click"/>
 
         <Label Content="Interval (minutes):"  Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
-        <TextBox x:Name="TxtInterval" TextChanged="TxtInterval_TextChanged" Grid.Row="1" Grid.Column="1" Margin="5"/>
+        <TextBox x:Name="TxtInterval" Grid.Row="1" Grid.Column="1" Margin="5"/>
 
         <Label Content="Start Time:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"/>
         <Grid Grid.Row="2" Grid.Column="1" Margin="5">
@@ -36,8 +36,8 @@
             <TextBox  x:Name="TxtStartTime" Grid.Column="2" Width="100" Margin="5,0,0,0" IsEnabled="False"/>
         </Grid>
         <CheckBox x:Name="ChkUseStartTime" Content="Use Start Time" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" Margin="5" 
-                  Checked="ChkUseStartTime_Checked"
-                   Unchecked="ChkUseStartTime_Unchecked"
+                  Checked="ChkUseStartTime_CheckedUnchecked"
+                   Unchecked="ChkUseStartTime_CheckedUnchecked"
                   />
 
         <Button x:Name="BtnStartStop" Content="Start" Grid.Row="3" Grid.Column="1" Margin="5" Padding="20,5" HorizontalAlignment="Left" Click="BtnStartStop_Click"/>
