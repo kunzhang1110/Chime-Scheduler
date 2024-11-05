@@ -3,9 +3,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Text.Json;
 using Application = System.Windows.Application;
 using MessageBox = System.Windows.MessageBox;
-using OpenFileDialog = Microsoft.Win32.OpenFileDialog; // Add this for Icon
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using System.Windows.Controls;
 
 namespace ChimeScheduler
 {
@@ -18,17 +20,26 @@ namespace ChimeScheduler
         private DateTime? startTime;
         private NotifyIcon? trayIcon;
 
+        private readonly string configFilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            System.Reflection.Assembly.GetExecutingAssembly().GetName().Name ?? "ChimeScheduler",
+            "configs.json"
+        );//C:\Users\{YourUsername}\AppData\Roaming
+
+        private Dictionary<string, string>? configs;
+
         public MainWindow()
         {
             InitializeComponent();
+            InitializeTrayIcon();
             DpStartDate.SelectedDate = DateTime.Today;
             TxtStartTime.Text = DateTime.Now.ToString("HH:mm");
-            InitializeTrayIcon();
+            Loaded += MainWindow_Loaded;
+            Closing += MainWindow_Closing!;
         }
 
         private void InitializeTrayIcon()
         {
-
             trayIcon = new NotifyIcon
             {
                 Icon = LoadIconFromResource("favicon.ico"),
@@ -40,25 +51,22 @@ namespace ChimeScheduler
             trayIcon.ContextMenuStrip.Items.Add("Exit", null, ExitMenuItem_Click!);
 
             trayIcon.DoubleClick += TrayIcon_DoubleClick!;
-
             StateChanged += MainWindow_StateChanged!;
         }
 
-        private Icon LoadIconFromResource(string resourceName)
+        private static Icon LoadIconFromResource(string resourceName)
         {
-            // Load the icon from the resources
-            using (Stream stream = Application.GetResourceStream(new Uri($"pack://application:,,,/{resourceName}")).Stream)
-            {
-                return new Icon(stream); // Create an Icon from the stream
-            }
+            using Stream stream =
+                Application.GetResourceStream(new Uri($"pack://application:,,,/{resourceName}")).Stream;
+            return new Icon(stream);
         }
 
-        private void MainWindow_StateChanged(object sender, System.EventArgs e)
+        private void MainWindow_StateChanged(object sender, EventArgs e)
         {
             if (WindowState == WindowState.Minimized)
             {
                 Hide();
-                trayIcon.Visible = true;
+                trayIcon!.Visible = true;
             }
         }
 
@@ -66,26 +74,56 @@ namespace ChimeScheduler
         {
             Show();
             WindowState = WindowState.Normal;
-            trayIcon.Visible = false;
+            trayIcon!.Visible = false;
         }
 
         private void ShowMenuItem_Click(object sender, EventArgs e)
         {
             Show();
             WindowState = WindowState.Normal;
-            trayIcon.Visible = false;
+            trayIcon!.Visible = false;
         }
 
         private void ExitMenuItem_Click(object sender, EventArgs e)
         {
-            trayIcon.Visible = false;
+            trayIcon!.Visible = false;
             trayIcon.Dispose();
             Application.Current.Shutdown();
         }
 
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            trayIcon.Visible = false;
+            if (File.Exists(configFilePath))
+            {
+                string json = File.ReadAllText(configFilePath);
+                configs = JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                    ?? new Dictionary<string, string>();
+                if (configs.TryGetValue("scriptPath", out var savedScriptPath))
+                {
+                    scriptPath = savedScriptPath;
+                    TxtScriptPath.Text = scriptPath;
+                }
+                if (configs.TryGetValue("intervalMinutes", out var savedIntervalMinutes))
+                {
+                    TxtInterval.Text = savedIntervalMinutes;
+                }
+            }
+            else
+            {
+                configs = new Dictionary<string, string>();
+            }
+        }
+
+        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {   // Save the configs and dispose tray icon when closing the window
+            configs!["scriptPath"] = scriptPath??string.Empty;
+            configs!["intervalMinutes"] = intervalMinutes.ToString();
+
+            Directory.CreateDirectory(Path.GetDirectoryName(configFilePath)!);
+            string json = JsonSerializer.Serialize(configs, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(configFilePath, json);
+    
+            trayIcon!.Visible = false;
             trayIcon.Dispose();
         }
 
@@ -103,9 +141,16 @@ namespace ChimeScheduler
             }
         }
 
+        private void TxtInterval_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (int.TryParse(TxtInterval.Text, out int result))
+            {
+                intervalMinutes = result;
+            }
+        }
+
         private void ChkUseStartTime_Checked(object sender, RoutedEventArgs e)
         {
-
             TxtStartTime.IsEnabled = true;
             DpStartDate.IsEnabled = true;
         }
@@ -155,7 +200,7 @@ namespace ChimeScheduler
                 }
                 catch (OperationCanceledException)
                 {
-                    // This exception is expected when cancelling the task
+                    Console.WriteLine("Operation cancelled.");
                 }
                 finally
                 {
@@ -165,7 +210,7 @@ namespace ChimeScheduler
             }
             else
             {
-                cancellationTokenSource.Cancel();
+                cancellationTokenSource?.Cancel();
             }
         }
 
@@ -193,31 +238,29 @@ namespace ChimeScheduler
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                await RunPowerShellScriptAsync(scriptPath, cancellationToken);
+                await RunPowerShellScriptAsync(scriptPath!, cancellationToken);
                 await Task.Delay(TimeSpan.FromMinutes(intervalMinutes), cancellationToken);
             }
         }
 
         private async Task RunPowerShellScriptAsync(string scriptPath, CancellationToken cancellationToken)
         {
-            using (Process process = new Process())
+            using Process process = new();
+            process.StartInfo.FileName = "powershell.exe";
+            process.StartInfo.Arguments = $"-ExecutionPolicy Bypass -File \"{scriptPath}\"";
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.CreateNoWindow = true;
+            process.Start();
+
+            string output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync(cancellationToken);
+
+            Dispatcher.Invoke(() =>
             {
-                process.StartInfo.FileName = "powershell.exe";
-                process.StartInfo.Arguments = $"-ExecutionPolicy Bypass -File \"{scriptPath}\"";
-                process.StartInfo.UseShellExecute = false;
-                process.StartInfo.RedirectStandardOutput = true;
-                process.StartInfo.CreateNoWindow = true;
-
-                process.Start();
-                string output = await process.StandardOutput.ReadToEndAsync();
-                await process.WaitForExitAsync(cancellationToken);
-
-                Dispatcher.Invoke(() =>
-                {
-                    TxtOutput.Text += $"{DateTime.Now}: Script executed\n{output}\n\n";
-                    TxtOutput.ScrollToEnd();
-                });
-            }
+                TxtOutput.Text += $"{DateTime.Now}: Script executed\n{output}\n\n";
+                TxtOutput.ScrollToEnd();
+            });
         }
     }
 }
