@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net6.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>true</SelfContained>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="favicon.ico" />
+	</ItemGroup>
+
+	<PropertyGroup>
+		<DebugType>embedded</DebugType>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Resource Include="favicon.ico" />
+	</ItemGroup>
+
+</Project>
