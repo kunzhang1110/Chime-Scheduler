@@ -36,8 +36,10 @@ namespace ScriptScheduler
             TxtStartTime.Text = DateTime.Now.ToString("HH:mm");
             Loaded += MainWindow_Loaded;
             Closing += MainWindow_Closing!;
+            //SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
+            SystemEvents.SessionSwitch += SystemEvents_HandleSessionSwitch;
         }
-        
+
 
         private void InitializeTrayIcon()
         {
@@ -150,9 +152,10 @@ namespace ScriptScheduler
             DpStartDate.IsEnabled = isChecked;   // Set the DatePicker enabled state
         }
 
+
         private async void BtnStartStop_Click(object sender, RoutedEventArgs e)
         {
-   
+
             if (!isRunning)
             {
                 if (string.IsNullOrEmpty(scriptPath) || !File.Exists(scriptPath))
@@ -182,9 +185,9 @@ namespace ScriptScheduler
                 }
 
                 isRunning = true;
-                BtnStartStop.Content = "Stop";
                 cancellationTokenSource = new CancellationTokenSource();
-                setControlIsEnabledState(false); 
+                BtnStartStop.Content = "Stop";
+                SetControlIsEnabledState(false);
 
                 try
                 {
@@ -198,17 +201,17 @@ namespace ScriptScheduler
                 {
                     isRunning = false;
                     BtnStartStop.Content = "Start";
-                    setControlIsEnabledState(true);
+                    SetControlIsEnabledState(true);
                 }
             }
             else
             {
                 cancellationTokenSource?.Cancel(); //request to cancel
             }
-  
+
         }
 
-        private void setControlIsEnabledState(bool enable)
+        private void SetControlIsEnabledState(bool enable)
         {
             TxtScriptPath.IsEnabled = enable;
             BtnBrowse.IsEnabled = enable;
@@ -233,13 +236,12 @@ namespace ScriptScheduler
         {
 
             if (startTime.HasValue)
-            {   // If the start time is in the past
-                TimeSpan initialDelay = startTime.Value - DateTime.Now;
+            {
+                TimeSpan elapsedTime = DateTime.Now - startTime.Value;
 
-                if (initialDelay < TimeSpan.Zero)
+                if (elapsedTime.TotalSeconds > 0)
                 {
-                    TimeSpan elapsedTime = DateTime.Now - startTime.Value;
-
+                    // If the start time is in the past
                     double intervalsPassed = Math.Floor(elapsedTime.TotalMinutes / intervalMinutes);
                     TimeSpan timeUntilNextExecution = TimeSpan.FromMinutes((intervalsPassed + 1) * intervalMinutes) - elapsedTime;
 
@@ -248,7 +250,7 @@ namespace ScriptScheduler
                 else
                 {
                     // If the start time is in the future, wait until the start time
-                    await Task.Delay(initialDelay, cancellationToken);
+                    await Task.Delay(-elapsedTime, cancellationToken);
                 }
             }
 
@@ -277,6 +279,38 @@ namespace ScriptScheduler
                 TxtOutput.Text += $"{DateTime.Now}: Script executed\n{output}\n\n";
                 TxtOutput.ScrollToEnd();
             });
+        }
+
+        private async void SystemEvents_HandleSessionSwitch(object sender, SessionSwitchEventArgs e)
+        {
+      
+            if (e.Reason == SessionSwitchReason.SessionUnlock)
+            {
+                cancellationTokenSource!.Cancel();
+                cancellationTokenSource!.Dispose();
+                await Task.Delay(100);
+
+                isRunning = true;
+                cancellationTokenSource = new CancellationTokenSource();
+                BtnStartStop.Content = "Stop";
+                SetControlIsEnabledState(false);
+
+                try
+                {
+                    await RunScriptPeriodicallyAsync(cancellationTokenSource.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    Console.WriteLine("Operation cancelled.");
+
+                }
+                finally
+                {
+                    isRunning = false;
+                    BtnStartStop.Content = "Start";
+                    SetControlIsEnabledState(true);
+                }
+            }
         }
     }
 }

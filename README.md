@@ -1,6 +1,6 @@
-# Chime Scheduler
+# Script Scheduler
 
-Chime Scheduler runs a PowerShell script on Windows at specified
+Script Scheduler runs a PowerShell script on Windows at specified
 intervals. The included script plays a sound—hence the name “Chime”—but
 it can run any PowerShell script. The project offers two solutions:
 
@@ -10,9 +10,9 @@ it can run any PowerShell script. The project offers two solutions:
 2.  Windows Task Scheduler – Offers greater customization and
     flexibility.
 
-## Use Chime Scheduler Windows App
+## Use Script Scheduler Windows App
 
-The app `Chime Scheduler.exe` can be found in the `Chime Scheduler.zip`
+The app `Script Scheduler.exe` can be found in the `Script Scheduler.zip`
 root folder. It runs a PowerShell Script at a certain interval (in
 minutes).
 
@@ -50,7 +50,7 @@ PowerShell script
     - In Settings - Program/script, type `powershell.exe`
 
     - In Settings - Add arguments, type `-WindowStyle hidden -File`
-      `C:\path\to\HourlyChime.ps1`
+      `C:\path\to\HourlyScript.ps1`
 
       - `-WindowStyle hidden` hides the powershell window
 
@@ -59,7 +59,7 @@ PowerShell script
     - Check Run task as soon as possible after a scheduled start is
       missed
 
-## Chime.ps1
+## Script.ps1
 
 The ps1 script plays a sound file locating at
 'C:\Windows\Media\Alarm03.wav'. Change the sound file location in the
